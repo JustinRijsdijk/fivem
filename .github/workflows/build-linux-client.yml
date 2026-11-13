@@ -96,12 +96,12 @@ jobs:
             Copy-Item -Force "$($cef.FullName)\Resources\*.pak" "$L\bin\cef\" -ErrorAction SilentlyContinue
             Copy-Item -Force "$($cef.FullName)\Resources\locales\en-US.pak" "$L\bin\cef\" -ErrorAction SilentlyContinue
           } else { Write-Host "::warning::no CEF dir found in vendor (validation below decides)" }
-          # NOTE: keep 'adhesive' in components.json — under Wine the client auto-substitutes
-          # the open-source 'sticky' component (ComponentLoader.cpp) and shows an "Insecure mode"
-          # notice. Stripping adhesive breaks that substitution (FatalError: Unknown component adhesive).
+          # NOTE: never strip 'adhesive' or 'sticky' from components.json. Public builds list
+          # 'sticky'; if 'adhesive' is listed, the client swaps it for 'sticky' under Wine
+          # (ComponentLoader.cpp) and shows an "Insecure mode" notice.
           # ---- fail closed: validate the runnable layout -----------------------
           # Required by the Linux runtime (scripts/install.sh, scripts/launch.sh):
-          # FiveM.exe, components.json (with 'adhesive' kept, see note above),
+          # FiveM.exe, components.json listing the Wine anti-cheat stub ('sticky', or 'adhesive' which the client swaps for sticky under Wine),
           # citizen/ui.zip (NUI/menu), CEF runtime (bin/libcef.dll + bin/icudtl.dat).
           $required = @(
             'FiveM.exe',
@@ -117,7 +117,9 @@ jobs:
           }
           $comp = Get-Content -Raw -LiteralPath "$L\components.json" | ConvertFrom-Json
           if (-not ($comp -is [System.Array]) -or $comp.Count -eq 0) { Write-Host '::error::components.json is not a non-empty list'; exit 1 }
-          if ($comp -notcontains 'adhesive') { Write-Host "::error::components.json lacks 'adhesive' (needed for the Wine 'sticky' substitution)"; exit 1 }
+          # Public-source builds list 'sticky' directly (code/components/config.lua); 'adhesive' is a
+          # private Cfx component that only official builds ship. Either one satisfies the loader.
+          if ($comp -notcontains 'sticky' -and $comp -notcontains 'adhesive') { Write-Host "::error::components.json lists neither 'sticky' nor 'adhesive' (the client needs one of them to start under Wine)"; exit 1 }
           $paks = @(Get-ChildItem -LiteralPath "$L\bin\cef" -Filter *.pak -ErrorAction SilentlyContinue)
           if ($paks.Count -eq 0) { Write-Host '::warning::no CEF .pak resources found in bin\cef' }
           # informational (documented postbuild outputs; not hard requirements)
