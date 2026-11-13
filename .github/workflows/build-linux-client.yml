@@ -19,13 +19,22 @@ jobs:
     steps:
       - name: Checkout this repo/branch to C-drive (fork-agnostic)
         shell: bash
+        env:
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          REF_NAME: ${{ github.ref_name }}
+          TOKEN: ${{ github.token }}
         run: |
           mkdir -p /c/b && cd /c/b
           git init .
           git config core.symlinks true
           # Build THIS repo at the branch the workflow was dispatched on (works on any fork).
-          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
-          git -c http.extraheader="AUTHORIZATION: bearer ${{ github.token }}" pull origin "${{ github.ref_name }}" --depth=1
+          # GitHub's git endpoint wants Basic auth (x-access-token:<token>), like
+          # actions/checkout uses; a 'bearer' header is rejected and git falls back to
+          # a username prompt, which fails in CI.
+          auth="$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          git remote add origin "$REPO_URL"
+          git -c http.extraheader="AUTHORIZATION: basic $auth" pull origin "$REF_NAME" --depth=1
           git submodule update --jobs=8 --init --depth=1
 
       - name: Setup Node
